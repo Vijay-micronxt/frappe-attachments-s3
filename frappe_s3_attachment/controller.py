@@ -174,10 +174,10 @@ class S3Operations(object):
                 ),
             )
 
-            detail = " ({0})".format(aws_code) if aws_code else ""
-            frappe.throw(
-                frappe._("File Upload Failed{0}: {1}").format(detail, str(e))
-            )
+            # Silent: do NOT raise. Return None so the caller keeps the file
+            # on local disk (the File record stays valid) instead of deleting
+            # it and pointing at a non-existent S3 object.
+            return None
         return key
 
     def delete_from_s3(self, key):
@@ -250,6 +250,12 @@ def file_upload_to_s3(doc, method):
             parent_name
         )
 
+        # Upload failed (already logged in Error Log). Leave the file on local
+        # disk and keep the existing file_url so nothing breaks; do not delete
+        # the local file or rewrite the URL to a missing S3 object.
+        if key is None:
+            return
+
         if doc.is_private:
             method = "frappe_s3_attachment.controller.generate_file"
             file_url = """/api/method/{0}?key={1}&file_name={2}""".format(method, key, doc.file_name)
@@ -313,6 +319,10 @@ def upload_existing_files_s3(name):
             doc.is_private, parent_doctype,
             parent_name
         )
+
+        # Upload failed (already logged). Keep the local file and its URL.
+        if key is None:
+            return
 
         if doc.is_private:
             method = "frappe_s3_attachment.controller.generate_file"
