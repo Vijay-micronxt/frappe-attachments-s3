@@ -139,8 +139,45 @@ class S3Operations(object):
                     }
                 )
 
-        except boto3.exceptions.S3UploadFailedError:
-            frappe.throw(frappe._("File Upload Failed. Please try again."))
+        except (boto3.exceptions.S3UploadFailedError, ClientError) as e:
+            # Extract the real AWS error code/message when available so the
+            # root cause (bad credentials, missing bucket, ACL not allowed,
+            # access denied, etc.) is visible instead of a generic message.
+            aws_code = ""
+            if isinstance(e, ClientError):
+                aws_code = e.response.get("Error", {}).get("Code", "")
+
+            frappe.log_error(
+                title="S3 Upload Failed - {0}".format(parent_doctype or "File")[:140],
+                message=(
+                    "Failed to upload file to S3.\n\n"
+                    "File: {file_name}\n"
+                    "Local path: {file_path}\n"
+                    "Bucket: {bucket}\n"
+                    "Key: {key}\n"
+                    "is_private: {is_private}\n"
+                    "Parent: {pdoctype} / {pname}\n"
+                    "AWS Error Code: {aws_code}\n\n"
+                    "Exception: {exc}\n\n"
+                    "Traceback:\n{tb}"
+                ).format(
+                    file_name=file_name,
+                    file_path=file_path,
+                    bucket=getattr(self, "BUCKET", ""),
+                    key=key,
+                    is_private=is_private,
+                    pdoctype=parent_doctype,
+                    pname=parent_name,
+                    aws_code=aws_code or "N/A",
+                    exc=str(e),
+                    tb=frappe.get_traceback(),
+                ),
+            )
+
+            detail = " ({0})".format(aws_code) if aws_code else ""
+            frappe.throw(
+                frappe._("File Upload Failed{0}: {1}").format(detail, str(e))
+            )
         return key
 
     def delete_from_s3(self, key):
