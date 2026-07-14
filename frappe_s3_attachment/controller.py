@@ -238,16 +238,23 @@ def file_upload_to_s3(doc, method):
 @frappe.whitelist()
 def generate_file(key=None, file_name=None):
     """
-    Function to stream file from s3.
+    Stream file content directly through Frappe instead of
+    redirecting to a raw S3 presigned URL.
     """
-    if key:
-        s3_upload = S3Operations()
-        signed_url = s3_upload.get_url(key, file_name)
-        frappe.local.response["type"] = "redirect"
-        frappe.local.response["location"] = signed_url
-    else:
+    if not key:
         frappe.local.response['body'] = "Key not found."
-    return
+        return
+
+    s3_upload = S3Operations()
+    try:
+        s3_object = s3_upload.read_file_from_s3(key)
+    except ClientError:
+        frappe.throw(frappe._("File not found or access denied."))
+
+    frappe.local.response.filename = file_name or key.split("/")[-1]
+    frappe.local.response.filecontent = s3_object['Body'].read()
+    frappe.local.response.type = "download"
+    frappe.local.response.mimetype = s3_object.get('ContentType', 'application/octet-stream')
 
 
 def upload_existing_files_s3(name):
