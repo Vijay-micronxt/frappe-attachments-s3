@@ -196,6 +196,8 @@ def file_upload_to_s3(doc, method):
     if getattr(doc, "custom_skip_s3_upload", 0):
         frappe.logger().info(f"Skipping S3 upload for {doc.name} due to skip_s3_upload flag.")
         return
+    if doc.attached_to_doctype == "GST Return Log":
+        return
     s3_upload = S3Operations()
     path = doc.file_url
     site_path = frappe.utils.get_site_path()
@@ -264,6 +266,8 @@ def upload_existing_files_s3(name):
     file_doc_name = frappe.db.get_value('File', {'name': name})
     if file_doc_name:
         doc = frappe.get_doc('File', name)
+        if doc.attached_to_doctype == "GST Return Log":
+            return
         s3_upload = S3Operations()
         path = doc.file_url
         site_path = frappe.utils.get_site_path()
